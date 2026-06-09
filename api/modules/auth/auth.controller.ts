@@ -8,6 +8,9 @@ export const register = catchAsync(async (req: Request, res: Response, next: Nex
   if (!username || !email || !password) {
     return next(new AppError('请提供用户名、邮箱和密码', 400))
   }
+  if (!authService.validatePassword(password)) {
+    return next(new AppError('密码需至少8位，包含大小写字母、数字和特殊字符', 400))
+  }
   const result = await authService.registerUser(username, email, password)
   res.status(201).json({ success: true, data: result })
 })
@@ -31,8 +34,8 @@ export const refresh = catchAsync(async (req: Request, res: Response, next: Next
 })
 
 export const getMe = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await query(
-    'SELECT id, username, email, avatar, created_at, updated_at FROM users WHERE id = $1',
+  const result = query(
+    'SELECT id, username, email, avatar, created_at, updated_at FROM users WHERE id = ?',
     [req.user!.id]
   )
   if (result.rows.length === 0) {
@@ -46,9 +49,13 @@ export const uploadAvatar = catchAsync(async (req: Request, res: Response, next:
     return next(new AppError('请上传头像文件', 400))
   }
   const avatarUrl = `/uploads/avatars/${req.file.filename}`
-  const result = await query(
-    'UPDATE users SET avatar = $1, updated_at = NOW() WHERE id = $2 RETURNING id, username, email, avatar, created_at, updated_at',
+  const result = query(
+    'UPDATE users SET avatar = ?, updated_at = datetime(\'now\') WHERE id = ?',
     [avatarUrl, req.user!.id]
   )
-  res.status(200).json({ success: true, data: result.rows[0] })
+  const userResult = query(
+    'SELECT id, username, email, avatar, created_at, updated_at FROM users WHERE id = ?',
+    [req.user!.id]
+  )
+  res.status(200).json({ success: true, data: userResult.rows[0] })
 })

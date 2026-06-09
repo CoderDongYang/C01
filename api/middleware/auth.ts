@@ -1,5 +1,6 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
+import { config } from '../config/index.js';
 import type { JwtPayload } from '../../shared/types.js';
 
 declare global {
@@ -11,11 +12,11 @@ declare global {
 }
 
 function generateTokens(payload: { id: string; email: string; username: string }) {
-  const accessToken = jwt.sign(payload, process.env.JWT_SECRET!, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+  const accessToken = jwt.sign(payload, config.jwt.secret!, {
+    expiresIn: config.jwt.expiresIn,
   } as SignOptions);
-  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET!, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+  const refreshToken = jwt.sign(payload, config.jwt.refreshSecret!, {
+    expiresIn: config.jwt.refreshExpiresIn,
   } as SignOptions);
   return { accessToken, refreshToken };
 }
@@ -27,7 +28,7 @@ function authenticate(req: Request, res: Response, next: NextFunction) {
   }
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    const decoded = jwt.verify(token, config.jwt.secret!) as JwtPayload;
     req.user = decoded;
     next();
   } catch {

@@ -1,7 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { User, Mail, Lock, ArrowRight } from "lucide-react";
+import { User, Mail, Lock, ArrowRight, Check, X } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
+
+const PASSWORD_RULES = [
+  { key: "length", label: "至少8个字符", test: (p: string) => p.length >= 8 },
+  { key: "upper", label: "包含大写字母", test: (p: string) => /[A-Z]/.test(p) },
+  { key: "lower", label: "包含小写字母", test: (p: string) => /[a-z]/.test(p) },
+  { key: "digit", label: "包含数字", test: (p: string) => /\d/.test(p) },
+  { key: "special", label: "包含特殊字符", test: (p: string) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(p) },
+];
 
 export default function Register() {
   const navigate = useNavigate();
@@ -17,6 +25,13 @@ export default function Register() {
     if (isAuthenticated) navigate("/dashboard", { replace: true });
   }, [isAuthenticated, navigate]);
 
+  const passwordChecks = useMemo(
+    () => PASSWORD_RULES.map((r) => ({ ...r, passed: r.test(password) })),
+    [password]
+  );
+
+  const isPasswordValid = passwordChecks.every((c) => c.passed);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -29,8 +44,8 @@ export default function Register() {
       setError("请输入邮箱");
       return;
     }
-    if (password.length < 6) {
-      setError("密码至少6个字符");
+    if (!isPasswordValid) {
+      setError("密码不满足复杂度要求");
       return;
     }
     if (password !== confirmPassword) {
@@ -41,8 +56,15 @@ export default function Register() {
     try {
       await register(username, email, password);
       navigate("/dashboard");
-    } catch {
-      setError("注册失败，请稍后重试");
+    } catch (err: any) {
+      const msg = err?.message || err?.data?.error || "";
+      if (msg.includes("已被注册")) {
+        setError("该邮箱已被注册");
+      } else if (msg.includes("复杂度") || msg.includes("密码")) {
+        setError(msg);
+      } else {
+        setError("注册失败，请稍后重试");
+      }
     }
   };
 
@@ -106,10 +128,29 @@ export default function Register() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="至少6个字符"
+                    placeholder="设置安全密码"
                     className="w-full bg-transparent text-foreground placeholder:text-muted-foreground outline-none text-sm"
                   />
                 </div>
+                {password.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {passwordChecks.map((check) => (
+                      <div
+                        key={check.key}
+                        className={`flex items-center gap-1.5 text-xs ${
+                          check.passed ? "text-accent" : "text-muted-foreground"
+                        }`}
+                      >
+                        {check.passed ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : (
+                          <X className="w-3.5 h-3.5" />
+                        )}
+                        {check.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -124,6 +165,9 @@ export default function Register() {
                     className="w-full bg-transparent text-foreground placeholder:text-muted-foreground outline-none text-sm"
                   />
                 </div>
+                {confirmPassword.length > 0 && password !== confirmPassword && (
+                  <p className="mt-1 text-xs text-destructive">两次输入的密码不一致</p>
+                )}
               </div>
 
               <button
