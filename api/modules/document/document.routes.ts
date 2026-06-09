@@ -8,7 +8,7 @@ import {
   deleteDocument,
 } from './document.controller.js'
 
-const router = Router()
+const router = Router({ mergeParams: true })
 
 router.use(authenticate)
 
