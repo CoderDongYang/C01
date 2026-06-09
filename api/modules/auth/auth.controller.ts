@@ -44,6 +44,24 @@ export const getMe = catchAsync(async (req: Request, res: Response, next: NextFu
   res.status(200).json({ success: true, data: result.rows[0] })
 })
 
+export const forgotPassword = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const { email } = req.body
+  if (!email) {
+    return next(new AppError('请提供邮箱', 400))
+  }
+  const result = await authService.createResetToken(email)
+  res.status(200).json({ success: true, data: result })
+})
+
+export const resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const { token, password } = req.body
+  if (!token || !password) {
+    return next(new AppError('请提供重置令牌和新密码', 400))
+  }
+  await authService.resetPassword(token, password)
+  res.status(200).json({ success: true, data: { message: '密码重置成功' } })
+})
+
 export const uploadAvatar = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.file) {
     return next(new AppError('请上传头像文件', 400))

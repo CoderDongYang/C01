@@ -58,3 +58,44 @@ export const refreshTokenFn = async (token: string) => {
   const user = result.rows[0]
   return generateTokens({ id: user.id as string, email: user.email as string, username: user.username as string })
 }
+
+export const createResetToken = async (email: string) => {
+  const result = query('SELECT id, username FROM users WHERE email = ?', [email])
+  if (result.rows.length === 0) {
+    throw new AppError('该邮箱未注册', 404)
+  }
+  const user = result.rows[0]
+  const resetToken = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+  query(
+    'INSERT INTO password_reset_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)',
+    [crypto.randomUUID(), user.id, resetToken, expiresAt]
+  )
+  return { resetToken, email }
+}
+
+export const resetPassword = async (token: string, newPassword: string) => {
+  const result = query(
+    'SELECT id, user_id, expires_at, used_at FROM password_reset_tokens WHERE token = ?',
+    [token]
+  )
+  if (result.rows.length === 0) {
+    throw new AppError('无效的重置令牌', 400)
+  }
+  const resetRecord = result.rows[0]
+  if (resetRecord.used_at) {
+    throw new AppError('该重置令牌已使用', 400)
+  }
+  if (new Date(resetRecord.expires_at as string) < new Date()) {
+    throw new AppError('重置令牌已过期', 400)
+  }
+  if (!validatePassword(newPassword)) {
+    throw new AppError('密码需至少8位，包含大小写字母、数字和特殊字符', 400)
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 10)
+  query('UPDATE users SET password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?', [
+    passwordHash,
+    resetRecord.user_id,
+  ])
+  query('UPDATE password_reset_tokens SET used_at = datetime(\'now\') WHERE id = ?', [resetRecord.id])
+}

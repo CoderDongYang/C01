@@ -86,6 +86,12 @@ export default function Login() {
                     className="w-full bg-transparent text-foreground placeholder:text-muted-foreground outline-none text-sm"
                   />
                 </div>
+                <Link
+                  to="/forgot-password"
+                  className="inline-block mt-2 text-sm text-accent hover:underline font-medium"
+                >
+                  忘记密码？
+                </Link>
               </div>
 
               <button
