@@ -23,8 +23,8 @@ export default function Login() {
       setError("请输入邮箱");
       return;
     }
-    if (password.length < 6) {
-      setError("密码至少6个字符");
+    if (password.length < 8) {
+      setError("密码至少8个字符");
       return;
     }
 
@@ -82,7 +82,7 @@ export default function Login() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="至少6个字符"
+                    placeholder="至少8个字符"
                     className="w-full bg-transparent text-foreground placeholder:text-muted-foreground outline-none text-sm"
                   />
                 </div>
