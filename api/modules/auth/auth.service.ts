@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import { query, queryReturning, config } from '../../config/index.js'
 import { generateTokens } from '../../middleware/auth.js'
 import { AppError } from '../../middleware/error.js'

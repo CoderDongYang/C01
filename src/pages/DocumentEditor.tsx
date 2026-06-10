@@ -284,7 +284,7 @@ export default function DocumentEditor() {
         ) {
           content = { type: 'doc', content: [] };
         }
-        editor.commands.setContent(content, { emitUpdate: false });
+        editor.commands.setContent(content, false);
       }
     }
   }, [currentDocument, editor]);
