@@ -59,10 +59,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   updateDocument: async (docId: string, data: { title?: string; content?: any }) => {
     const { currentSpaceId } = get();
     await api.patch(`/api/spaces/${currentSpaceId}/documents/${docId}`, data);
-    if (get().currentDocument?.id === docId) {
+    if (get().currentDocument?.id === docId && data.title !== undefined) {
       set((state) => ({
         currentDocument: state.currentDocument
-          ? { ...state.currentDocument, ...data }
+          ? { ...state.currentDocument, title: data.title }
           : null,
       }));
     }

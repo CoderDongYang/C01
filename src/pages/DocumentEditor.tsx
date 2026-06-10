@@ -249,7 +249,42 @@ export default function DocumentEditor() {
     if (currentDocument) {
       setTitle(currentDocument.title);
       if (editor && !editor.isDestroyed) {
-        editor.commands.setContent(currentDocument.content || '');
+        let content: any = currentDocument.content ?? '';
+        if (typeof content === 'string') {
+          try {
+            const parsed = JSON.parse(content);
+            if (
+              parsed !== null &&
+              typeof parsed === 'object' &&
+              !Array.isArray(parsed)
+            ) {
+              content = parsed;
+            } else if (Array.isArray(parsed)) {
+              content = { type: 'doc', content: parsed };
+            } else {
+              content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: String(parsed) }] }] };
+            }
+          } catch {
+            content = {
+              type: 'doc',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: content ? [{ type: 'text', text: content }] : [],
+                },
+              ],
+            };
+          }
+        }
+        if (
+          content === null ||
+          typeof content !== 'object' ||
+          Array.isArray(content) ||
+          content.type !== 'doc'
+        ) {
+          content = { type: 'doc', content: [] };
+        }
+        editor.commands.setContent(content, { emitUpdate: false });
       }
     }
   }, [currentDocument, editor]);

@@ -15,9 +15,10 @@ export const createDocument = async (
     throw new AppError('您不是该空间的成员', 403)
   }
   const docId = generateId()
+  const emptyDoc = JSON.stringify({ type: 'doc', content: [] })
   queryReturning(
     'INSERT INTO documents (id, space_id, title, content, created_by, parent_id) VALUES (?, ?, ?, ?, ?, ?)',
-    [docId, spaceId, title, '{}', userId, parentId || null],
+    [docId, spaceId, title, emptyDoc, userId, parentId || null],
   )
   const result = query('SELECT * FROM documents WHERE id = ?', [docId])
   return result.rows[0]
