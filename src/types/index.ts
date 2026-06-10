@@ -25,6 +25,7 @@ export interface DocumentListItem {
   title: string;
   parent_id: string | null;
   created_by: string;
+  created_at: string;
   updated_at: string;
 }
 

@@ -33,7 +33,7 @@ export const getSpaceDocuments = async (spaceId: string, userId: string) => {
     throw new AppError('您不是该空间的成员', 403)
   }
   const result = query(
-    'SELECT id, title, parent_id, created_by, updated_at FROM documents WHERE space_id = ?',
+    'SELECT id, title, parent_id, created_by, created_at, updated_at FROM documents WHERE space_id = ?',
     [spaceId],
   )
   return result.rows

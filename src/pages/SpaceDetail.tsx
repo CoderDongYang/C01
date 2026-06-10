@@ -203,8 +203,16 @@ export default function SpaceDetail() {
   };
 
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!dateStr) return '';
+    const parsed = new Date(dateStr.replace(' ', 'T') + 'Z');
+    if (isNaN(parsed.getTime())) return dateStr;
+    return parsed.toLocaleDateString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
   };
 
   const getInitials = (name: string) => name.charAt(0).toUpperCase();
@@ -258,7 +266,7 @@ export default function SpaceDetail() {
                         <FileText className="h-5 w-5 shrink-0 text-brand" />
                         <div className="min-w-0">
                           <p className="truncate font-medium text-foreground">{doc.title}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(doc.updated_at)}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(doc.created_at)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
