@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { catchAsync } from '../../middleware/error.js'
 import * as documentService from './document.service.js'
+import * as versionService from './version.service.js'
 
 export const createDocument = catchAsync(
   async (req: Request, res: Response, _next: NextFunction) => {
@@ -54,5 +55,32 @@ export const deleteDocument = catchAsync(
     const userId = req.user!.id
     await documentService.deleteDocument(docId, userId)
     res.status(200).json({ success: true, message: '文档已删除' })
+  },
+)
+
+export const getDocumentVersions = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const { docId } = req.params
+    const userId = req.user!.id
+    const versions = await versionService.getDocumentVersions(docId, userId)
+    res.status(200).json({ success: true, data: versions })
+  },
+)
+
+export const getVersion = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const { versionId } = req.params
+    const userId = req.user!.id
+    const version = await versionService.getVersionById(versionId, userId)
+    res.status(200).json({ success: true, data: version })
+  },
+)
+
+export const rollbackToVersion = catchAsync(
+  async (req: Request, res: Response, _next: NextFunction) => {
+    const { versionId } = req.params
+    const userId = req.user!.id
+    const document = await versionService.rollbackToVersion(versionId, userId)
+    res.status(200).json({ success: true, data: document })
   },
 )

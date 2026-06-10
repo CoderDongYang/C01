@@ -1,5 +1,7 @@
 import { query, queryReturning, generateId } from '../../config/index.js'
 import { AppError } from '../../middleware/error.js'
+import { saveVersion } from './version.service.js'
+import { getDocumentOnlineCount } from '../../socket/documentUsers.js'
 
 export const createDocument = async (
   spaceId: string,
@@ -36,7 +38,10 @@ export const getSpaceDocuments = async (spaceId: string, userId: string) => {
     'SELECT id, title, parent_id, created_by, created_at, updated_at FROM documents WHERE space_id = ?',
     [spaceId],
   )
-  return result.rows
+  return result.rows.map((doc: any) => ({
+    ...doc,
+    online_count: getDocumentOnlineCount(doc.id),
+  }))
 }
 
 export const getDocumentById = async (docId: string, userId: string) => {
@@ -59,6 +64,7 @@ export const updateDocument = async (
   docId: string,
   userId: string,
   data: { title?: string; content?: unknown },
+  skipVersionSave?: boolean,
 ) => {
   const docResult = query('SELECT * FROM documents WHERE id = ?', [docId])
   if (docResult.rows.length === 0) {
@@ -72,6 +78,20 @@ export const updateDocument = async (
   if (memberResult.rows.length === 0) {
     throw new AppError('您没有权限修改该文档', 403)
   }
+
+  if (!skipVersionSave) {
+    const contentChanged = data.content !== undefined && data.content !== document.content
+    const titleChanged = data.title !== undefined && data.title !== document.title
+    if (contentChanged || titleChanged) {
+      await saveVersion(
+        docId,
+        document.title as string,
+        document.content as string,
+        userId,
+      )
+    }
+  }
+
   const updates: string[] = []
   const values: unknown[] = []
   if (data.title !== undefined) {

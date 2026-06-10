@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, FileText, ArrowLeft, Trash2, Copy,
-  Shield, Crown, UserCircle, X, Users,
+  Shield, Crown, UserCircle, X, Users, Radio,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useSpaceStore } from '@/stores/spaceStore';
@@ -265,7 +265,15 @@ export default function SpaceDetail() {
                       <div className="flex items-center gap-3 min-w-0">
                         <FileText className="h-5 w-5 shrink-0 text-brand" />
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-foreground">{doc.title}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-medium text-foreground">{doc.title}</p>
+                            {doc.online_count && doc.online_count > 0 && (
+                              <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 text-xs text-green-700 dark:text-green-400">
+                                <Radio className="h-2.5 w-2.5 fill-current" />
+                                {doc.online_count}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">{formatDate(doc.created_at)}</p>
                         </div>
                       </div>

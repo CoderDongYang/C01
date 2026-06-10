@@ -52,3 +52,48 @@ export interface JwtPayload {
   email: string;
   username: string;
 }
+
+export interface DocumentVersion {
+  id: string;
+  document_id: string;
+  title: string;
+  content: string;
+  created_by: string;
+  created_by_name?: string;
+  created_by_avatar?: string | null;
+  created_at: string;
+  version_number: number;
+}
+
+export interface OnlineUser {
+  id: string;
+  username: string;
+  email: string;
+  avatar: string | null;
+  color: string;
+}
+
+export interface CursorPosition {
+  userId: string;
+  anchor: number;
+  head: number;
+  title?: boolean;
+}
+
+export interface TypingUser {
+  userId: string;
+  isTyping: boolean;
+}
+
+export interface SocketEvents {
+  'join-document': (docId: string) => void;
+  'leave-document': (docId: string) => void;
+  'document-change': (data: { docId: string; changes: unknown; userId: string }) => void;
+  'cursor-change': (data: { docId: string; cursor: CursorPosition }) => void;
+  'typing': (data: { docId: string; userId: string; isTyping: boolean }) => void;
+  'title-change': (data: { docId: string; title: string; userId: string }) => void;
+  'online-users': (users: OnlineUser[]) => void;
+  'user-joined': (user: OnlineUser) => void;
+  'user-left': (userId: string) => void;
+  'version-saved': (version: DocumentVersion) => void;
+}

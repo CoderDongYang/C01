@@ -11,6 +11,7 @@ import authRoutes from './modules/auth/auth.routes.js'
 import spaceRoutes from './modules/space/space.routes.js'
 import documentRoutes from './modules/document/document.routes.js'
 import aiRoutes from './modules/ai/ai.routes.js'
+import uploadRoutes from './modules/upload/upload.routes.js'
 import { errorHandler } from './middleware/error.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -30,6 +31,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/spaces', spaceRoutes)
 app.use('/api/spaces/:spaceId/documents', documentRoutes)
 app.use('/api/ai', aiRoutes)
+app.use('/api/upload', uploadRoutes)
 
 app.use(
   '/api/health',

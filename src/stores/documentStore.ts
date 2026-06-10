@@ -1,25 +1,31 @@
 import { create } from 'zustand';
 import { api } from '@/api/client';
-import type { DocumentListItem, DocumentDetail } from '@/types';
+import type { DocumentListItem, DocumentDetail, DocumentVersion } from '@/types';
 
 interface DocumentState {
   documents: DocumentListItem[];
   currentDocument: DocumentDetail | null;
   currentSpaceId: string | null;
+  versions: DocumentVersion[];
   isLoading: boolean;
+  isVersionsLoading: boolean;
   fetchDocuments: (spaceId: string) => Promise<void>;
   fetchDocument: (docId: string) => Promise<void>;
   createDocument: (spaceId: string, title: string, parentId?: string) => Promise<DocumentDetail>;
   updateDocument: (docId: string, data: { title?: string; content?: any }) => Promise<void>;
   deleteDocument: (docId: string) => Promise<void>;
   setCurrentSpaceId: (spaceId: string) => void;
+  fetchVersions: (docId: string) => Promise<void>;
+  rollbackToVersion: (versionId: string) => Promise<void>;
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   documents: [],
   currentDocument: null,
   currentSpaceId: null,
+  versions: [],
   isLoading: false,
+  isVersionsLoading: false,
 
   fetchDocuments: async (spaceId: string) => {
     set({ isLoading: true, currentSpaceId: spaceId });
@@ -79,5 +85,28 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   setCurrentSpaceId: (spaceId: string) => {
     set({ currentSpaceId: spaceId });
+  },
+
+  fetchVersions: async (docId: string) => {
+    set({ isVersionsLoading: true });
+    try {
+      const { currentSpaceId } = get();
+      const versions = await api.get<DocumentVersion[]>(
+        `/api/spaces/${currentSpaceId}/documents/${docId}/versions`
+      );
+      set({ versions });
+    } finally {
+      set({ isVersionsLoading: false });
+    }
+  },
+
+  rollbackToVersion: async (versionId: string) => {
+    const { currentSpaceId, currentDocument } = get();
+    if (!currentDocument) return;
+    const updatedDoc = await api.post<DocumentDetail>(
+      `/api/spaces/${currentSpaceId}/documents/versions/${versionId}/rollback`
+    );
+    set({ currentDocument: updatedDoc });
+    await get().fetchVersions(currentDocument.id);
   },
 }));

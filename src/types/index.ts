@@ -1,4 +1,15 @@
-export type { User, Space, SpaceMember, Document, InviteLink, JwtPayload } from '../../shared/types';
+export type {
+  User,
+  Space,
+  SpaceMember,
+  Document,
+  InviteLink,
+  JwtPayload,
+  DocumentVersion,
+  OnlineUser,
+  CursorPosition,
+  TypingUser,
+} from '../../shared/types';
 
 export interface SpaceResponse {
   id: string;
@@ -27,6 +38,7 @@ export interface DocumentListItem {
   created_by: string;
   created_at: string;
   updated_at: string;
+  online_count?: number;
 }
 
 export interface DocumentDetail extends DocumentListItem {

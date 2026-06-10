@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DB_PATH = path.resolve(__dirname, '../../data/codoc.db');
-const MIGRATION_PATH = path.resolve(__dirname, '../../migrations/001_initial.sql');
+const MIGRATIONS_DIR = path.resolve(__dirname, '../../migrations');
 
 let db: initSqlJs.Database;
 
@@ -34,14 +34,22 @@ async function initDatabase(): Promise<void> {
   db.run('PRAGMA foreign_keys = ON;');
   db.run('PRAGMA journal_mode = WAL;');
 
-  const migrationSQL = fs.readFileSync(MIGRATION_PATH, 'utf-8');
-  const statements = migrationSQL
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const migrationFiles = fs
+    .readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
 
-  for (const stmt of statements) {
-    db.run(stmt);
+  for (const migrationFile of migrationFiles) {
+    const migrationPath = path.join(MIGRATIONS_DIR, migrationFile);
+    const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
+    const statements = migrationSQL
+      .split(';')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    for (const stmt of statements) {
+      db.run(stmt);
+    }
   }
 
   saveDatabase();
