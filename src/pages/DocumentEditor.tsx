@@ -281,7 +281,6 @@ export default function DocumentEditor() {
   } = useCollaborativeEditor({
     docId: docId || '',
     editor,
-    title,
     onTitleChange: handleTitleChange,
   });
 

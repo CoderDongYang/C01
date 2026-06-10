@@ -18,6 +18,7 @@ export const setupSocketIO = (server: import('http').Server) => {
 
   io.use((socket, next) => {
     const token = socket.handshake.auth.token
+    console.log('[Socket] Auth attempt, token present:', !!token)
     if (!token) {
       return next(new Error('Authentication error'))
     }
@@ -31,24 +32,30 @@ export const setupSocketIO = (server: import('http').Server) => {
         return next(new Error('User not found'))
       }
       socket.data.user = userResult.rows[0]
+      console.log('[Socket] Auth success:', socket.data.user.username)
       next()
-    } catch {
+    } catch (err) {
+      console.error('[Socket] Auth error:', err)
       next(new Error('Authentication error'))
     }
   })
 
   io.on('connection', (socket) => {
     const user = socket.data.user as { id: string; username: string; email: string; avatar: string | null }
-    console.log(`User connected: ${user.id}`)
+    console.log(`[Socket] User connected: ${user.username} (${user.id}), socket=${socket.id}`)
 
     socket.on('join-document', (docId: string) => {
+      console.log(`[Socket] ${user.username} joining document: ${docId}`)
       socket.join(docId)
       const onlineUser = addUserToDocument(docId, user, socket.id)
+      const onlineCount = getDocumentOnlineCount(docId)
+      console.log(`[Socket] Document ${docId} now has ${onlineCount} online users`)
       socket.to(docId).emit('user-joined', onlineUser)
       socket.emit('online-users', getOnlineUsers(docId))
     })
 
     socket.on('leave-document', (docId: string) => {
+      console.log(`[Socket] ${user.username} leaving document: ${docId}`)
       socket.leave(docId)
       removeUserFromDocument(docId, user.id)
       socket.to(docId).emit('user-left', user.id)
@@ -83,7 +90,7 @@ export const setupSocketIO = (server: import('http').Server) => {
     })
 
     socket.on('disconnect', () => {
-      console.log(`User disconnected: ${user.id}`)
+      console.log(`[Socket] User disconnected: ${user.username} (${user.id})`)
       const affectedDocs = removeUserFromAllDocuments(user.id)
       affectedDocs.forEach((docId) => {
         socket.to(docId).emit('user-left', user.id)

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
 import { getSocket } from '@/lib/socket';
-import type { OnlineUser, CursorPosition, DocumentVersion } from '@/types';
+import type { OnlineUser, CursorPosition } from '@/types';
 import { useAuthStore } from '@/stores/authStore';
 
 interface UseCollaborativeEditorOptions {
   docId: string;
   editor: Editor | null;
-  title: string;
   onTitleChange: (title: string) => void;
 }
 
@@ -23,7 +22,6 @@ interface RemoteCursor {
 export function useCollaborativeEditor({
   docId,
   editor,
-  title,
   onTitleChange,
 }: UseCollaborativeEditorOptions) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -33,12 +31,29 @@ export function useCollaborativeEditor({
   const user = useAuthStore((s) => s.user);
   const isRemoteChangeRef = useRef(false);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const onlineUsersRef = useRef<OnlineUser[]>([]);
+  const editorRef = useRef<Editor | null>(null);
+  const onTitleChangeRef = useRef(onTitleChange);
 
   useEffect(() => {
+    onlineUsersRef.current = onlineUsers;
+  }, [onlineUsers]);
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  useEffect(() => {
+    onTitleChangeRef.current = onTitleChange;
+  }, [onTitleChange]);
+
+  useEffect(() => {
+    if (!docId || !user?.id) return;
     const socket = socketRef.current;
+    const currentUserId = user.id;
 
     const handleOnlineUsers = (users: OnlineUser[]) => {
-      setOnlineUsers(users.filter((u) => u.id !== user?.id));
+      setOnlineUsers(users.filter((u) => u.id !== currentUserId));
     };
 
     const handleUserJoined = (userData: OnlineUser) => {
@@ -59,10 +74,10 @@ export function useCollaborativeEditor({
     };
 
     const handleCursorChange = (cursor: CursorPosition & { userId: string }) => {
-      if (cursor.userId === user?.id) return;
+      if (cursor.userId === currentUserId) return;
       setRemoteCursors((prev) => {
         const existing = prev.find((c) => c.userId === cursor.userId);
-        const onlineUser = onlineUsers.find((u) => u.id === cursor.userId);
+        const onlineUser = onlineUsersRef.current.find((u) => u.id === cursor.userId);
         if (existing) {
           return prev.map((c) =>
             c.userId === cursor.userId
@@ -85,7 +100,7 @@ export function useCollaborativeEditor({
     };
 
     const handleTyping = (data: { userId: string; isTyping: boolean }) => {
-      if (data.userId === user?.id) return;
+      if (data.userId === currentUserId) return;
       setTypingUsers((prev) => {
         const next = new Set(prev);
         if (data.isTyping) {
@@ -98,10 +113,10 @@ export function useCollaborativeEditor({
     };
 
     const handleDocumentChange = (data: { changes: any; userId: string }) => {
-      if (data.userId === user?.id || !editor) return;
+      if (data.userId === currentUserId || !editorRef.current) return;
       isRemoteChangeRef.current = true;
       try {
-        editor.commands.setContent(data.changes, false);
+        editorRef.current.commands.setContent(data.changes, false);
       } finally {
         setTimeout(() => {
           isRemoteChangeRef.current = false;
@@ -110,8 +125,8 @@ export function useCollaborativeEditor({
     };
 
     const handleTitleChange = (data: { title: string; userId: string }) => {
-      if (data.userId === user?.id) return;
-      onTitleChange(data.title);
+      if (data.userId === currentUserId) return;
+      onTitleChangeRef.current(data.title);
     };
 
     socket.on('online-users', handleOnlineUsers);
@@ -135,7 +150,7 @@ export function useCollaborativeEditor({
 
       socket.emit('leave-document', docId);
     };
-  }, [docId, editor, user?.id, onlineUsers, onTitleChange]);
+  }, [docId, user?.id]);
 
   const sendCursorUpdate = useCallback(
     (anchor: number, head: number) => {
