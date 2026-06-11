@@ -5,30 +5,19 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
-import Image from '@tiptap/extension-image';
 import {
   ArrowLeft, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus, X, Send, Bot, Sparkles,
-  Clock, Image as ImageIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useDocumentStore } from '@/stores/documentStore';
-import { useCollaborativeEditor } from '@/hooks/useCollaborativeEditor';
-import VersionHistoryPanel from '@/components/VersionHistoryPanel';
-import OnlineUsersBadge from '@/components/OnlineUsersBadge';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-function EditorToolbar({
-  editor,
-  onInsertImage,
-}: {
-  editor: ReturnType<typeof useEditor> | null;
-  onInsertImage: () => void;
-}) {
+function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null }) {
   if (!editor) return null;
 
   const buttons = [
@@ -62,14 +51,6 @@ function EditorToolbar({
           <Icon className="h-4 w-4" />
         </button>
       ))}
-      <div className="mx-1 h-5 w-px bg-border" />
-      <button
-        onClick={onInsertImage}
-        title="插入图片"
-        className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-      >
-        <ImageIcon className="h-4 w-4" />
-      </button>
     </div>
   );
 }
@@ -112,6 +93,10 @@ function AiChatPanel({
         body: JSON.stringify({ messages: newMessages, context: docContent }),
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let accumulated = '';
@@ -119,7 +104,7 @@ function AiChatPanel({
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const text = decoder.decode(value);
+        const text = decoder.decode(value, { stream: true });
         const lines = text.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -127,21 +112,28 @@ function AiChatPanel({
             if (data === '[DONE]') break;
             try {
               const parsed = JSON.parse(data);
-              accumulated += parsed.content;
-              setMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: accumulated };
-                return updated;
-              });
+              if (parsed.content) {
+                accumulated += parsed.content;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'assistant', content: accumulated };
+                  return updated;
+                });
+              }
             } catch {
+              // skip malformed chunks
             }
           }
         }
       }
-    } catch {
+    } catch (error) {
+      console.error('AI chat error:', error);
       setMessages((prev) => {
         const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', content: '请求失败，请重试' };
+        updated[updated.length - 1] = {
+          role: 'assistant',
+          content: '请求失败，请检查网络连接后重试。',
+        };
         return updated;
       });
     } finally {
@@ -156,11 +148,18 @@ function AiChatPanel({
     }
   };
 
+  const quickActions = [
+    { label: '总结文档', prompt: '请帮我总结一下这篇文档的内容' },
+    { label: '提取关键词', prompt: '请帮我提取这篇文档的关键词' },
+    { label: '文档统计', prompt: '请帮我统计一下这篇文档的字数和段落信息' },
+    { label: '标题建议', prompt: '请帮我为这篇文档推荐几个合适的标题' },
+  ];
+
   return (
     <>
       {open && <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={onClose} />}
       <div
-        className={`fixed right-0 top-0 z-40 flex h-full w-full flex-col border-l border-border bg-card shadow-xl transition-transform duration-300 sm:w-[380px] ${
+        className={`fixed right-0 top-0 z-40 flex h-full w-full flex-col border-l border-border bg-card shadow-xl transition-transform duration-300 sm:w-[420px] ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -176,9 +175,29 @@ function AiChatPanel({
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Sparkles className="mb-3 h-8 w-8" />
-              <p className="text-sm">向 AI 助手提问吧</p>
+            <div className="space-y-4">
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <Sparkles className="mb-3 h-8 w-8 text-accent" />
+                <p className="text-sm font-medium">文档智能助手</p>
+                <p className="text-xs mt-1 text-muted-foreground/70">
+                  支持文档总结、关键词提取、内容分析等功能
+                </p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground px-1">快捷操作</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {quickActions.map((action) => (
+                    <button
+                      key={action.label}
+                      onClick={() => sendMessage(action.prompt)}
+                      disabled={isStreaming}
+                      className="flex flex-col items-start gap-1 rounded-lg border border-border bg-background p-3 text-left hover:border-accent/50 hover:bg-accent/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="text-sm font-medium text-foreground">{action.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
           {messages.map((msg, i) => (
@@ -208,7 +227,7 @@ function AiChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="输入消息..."
+              placeholder="输入消息，或点击上方快捷操作..."
               rows={1}
               className="flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
@@ -231,23 +250,11 @@ export default function DocumentEditor() {
   const navigate = useNavigate();
   const location = useLocation();
   const spaceId = (location.state as { spaceId?: string })?.spaceId;
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const [title, setTitle] = useState('');
-  const [showAiPanel, setShowAiPanel] = useState(false);
-  const [showVersionPanel, setShowVersionPanel] = useState(false);
 
-  const {
-    currentDocument,
-    fetchDocument,
-    updateDocument,
-    setCurrentSpaceId,
-    versions,
-    isVersionsLoading,
-    fetchVersions,
-    rollbackToVersion,
-  } = useDocumentStore();
+  const { currentDocument, fetchDocument, updateDocument, setCurrentSpaceId } = useDocumentStore();
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [title, setTitle] = useState('');
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const editor = useEditor({
     extensions: [
@@ -257,75 +264,23 @@ export default function DocumentEditor() {
       Placeholder.configure({ placeholder: '开始书写...' }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Image.configure({
-        inline: false,
-        allowBase64: false,
-      }),
     ],
     content: '',
-  });
-
-  const handleTitleChange = useCallback((newTitle: string) => {
-    setTitle(newTitle);
-  }, []);
-
-  const {
-    onlineUsers,
-    remoteCursors,
-    typingUsers,
-    sendCursorUpdate,
-    sendContentUpdate,
-    sendTitleUpdate,
-    sendTyping,
-    isRemoteChangeRef,
-  } = useCollaborativeEditor({
-    docId: docId || '',
-    editor,
-    onTitleChange: handleTitleChange,
-  });
-
-  const typingUsersList = onlineUsers.filter((u) => typingUsers.has(u.id));
-
-  useEffect(() => {
-    if (!editor || !docId) return;
-
-    const handleUpdate = () => {
+    onUpdate: ({ editor: e }) => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
-        updateDocument(docId, { content: editor.getJSON() });
+        if (docId) {
+          updateDocument(docId, { content: e.getJSON() });
+        }
       }, 1000);
-
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        sendTyping(false);
-      }, 1500);
-      sendTyping(true);
-
-      if (!isRemoteChangeRef.current) {
-        sendContentUpdate(editor.getJSON());
-      }
-    };
-
-    const handleSelectionUpdate = () => {
-      const { from, to } = editor.state.selection;
-      sendCursorUpdate(from, to);
-    };
-
-    editor.on('update', handleUpdate);
-    editor.on('selectionUpdate', handleSelectionUpdate);
-
-    return () => {
-      editor.off('update', handleUpdate);
-      editor.off('selectionUpdate', handleSelectionUpdate);
-    };
-  }, [editor, docId, updateDocument, sendTyping, sendCursorUpdate, sendContentUpdate, isRemoteChangeRef]);
+    },
+  });
 
   useEffect(() => {
     if (!docId) return;
     if (spaceId) setCurrentSpaceId(spaceId);
     fetchDocument(docId);
-    fetchVersions(docId);
-  }, [docId, spaceId, fetchDocument, fetchVersions, setCurrentSpaceId]);
+  }, [docId, spaceId, fetchDocument, setCurrentSpaceId]);
 
   useEffect(() => {
     if (currentDocument) {
@@ -366,35 +321,10 @@ export default function DocumentEditor() {
         ) {
           content = { type: 'doc', content: [] };
         }
-        isRemoteChangeRef.current = true;
         editor.commands.setContent(content, false);
-        setTimeout(() => {
-          isRemoteChangeRef.current = false;
-        }, 0);
       }
     }
-  }, [currentDocument, editor, isRemoteChangeRef]);
-
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) {
-            handleImageUpload(file);
-          }
-          break;
-        }
-      }
-    };
-
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
-  }, [editor]);
+  }, [currentDocument, editor]);
 
   const handleTitleBlur = useCallback(() => {
     if (docId && title.trim() && currentDocument?.title !== title.trim()) {
@@ -411,60 +341,6 @@ export default function DocumentEditor() {
     },
     [],
   );
-
-  const handleTitleInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newTitle = e.target.value;
-      setTitle(newTitle);
-      sendTitleUpdate(newTitle);
-    },
-    [sendTitleUpdate],
-  );
-
-  const handleImageUpload = async (file: File) => {
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-
-      const token = useAuthStore.getState().accessToken;
-      const response = await fetch('/api/upload/image', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const result = await response.json();
-      if (result.success && result.data?.url) {
-        if (editor) {
-          editor.chain().focus().setImage({ src: result.data.url }).run();
-        }
-      } else {
-        alert(result.error || '图片上传失败');
-      }
-    } catch (err) {
-      alert('图片上传失败，请重试');
-    }
-  };
-
-  const handleInsertImage = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleImageUpload(file);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleRollback = async (versionId: string) => {
-    await rollbackToVersion(versionId);
-  };
 
   const docTextContent = editor?.getText() || '';
 
@@ -483,89 +359,43 @@ export default function DocumentEditor() {
             <ArrowLeft className="h-4 w-4" />
             返回空间
           </button>
-          <div className="flex items-center gap-2">
-            <OnlineUsersBadge users={onlineUsers} />
-            <button
-              onClick={() => setShowVersionPanel(!showVersionPanel)}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                showVersionPanel
-                  ? 'bg-accent text-accent-foreground'
-                  : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              <Clock className="h-4 w-4" />
-              历史版本
-            </button>
-            <button
-              onClick={() => setShowAiPanel(!showAiPanel)}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                showAiPanel
-                  ? 'bg-accent text-accent-foreground'
-                  : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              <Sparkles className="h-4 w-4" />
-              AI 助手
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <input
-            value={title}
-            onChange={handleTitleInput}
-            onBlur={handleTitleBlur}
-            onKeyDown={handleTitleKeyDown}
-            placeholder="无标题文档"
-            className="w-full bg-transparent text-2xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
-          />
-          {typingUsersList.length > 0 && (
-            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <span className="inline-flex gap-0.5">
-                <span className="animate-pulse">●</span>
-                <span className="animate-pulse delay-75">●</span>
-                <span className="animate-pulse delay-150">●</span>
-              </span>
-              <span>
-                {typingUsersList.length === 1
-                  ? `${typingUsersList[0].username} 正在输入...`
-                  : `${typingUsersList.slice(0, 2).map((u) => u.username).join('、')} 等 ${typingUsersList.length} 人正在输入...`}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="mb-3">
-          <EditorToolbar editor={editor} onInsertImage={handleInsertImage} />
-        </div>
-
-        <div className="mx-auto max-w-4xl">
-          <div className="relative min-h-[60vh] rounded-lg border border-border bg-card p-6 sm:p-8">
-            <EditorContent editor={editor} className="prose-editor" />
-          </div>
+          <button
+            onClick={() => setShowAiPanel(!showAiPanel)}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              showAiPanel
+                ? 'bg-accent text-accent-foreground'
+                : 'border border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+            AI 助手
+          </button>
         </div>
 
         <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          className="hidden"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={handleTitleBlur}
+          onKeyDown={handleTitleKeyDown}
+          placeholder="无标题文档"
+          className="mb-3 w-full bg-transparent text-2xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
         />
+
+        <div className="mb-3">
+          <EditorToolbar editor={editor} />
+        </div>
+
+        <div className="mx-auto max-w-4xl">
+          <div className="min-h-[60vh] rounded-lg border border-border bg-card p-6 sm:p-8">
+            <EditorContent editor={editor} className="prose-editor" />
+          </div>
+        </div>
       </div>
 
       <AiChatPanel
         open={showAiPanel}
         onClose={() => setShowAiPanel(false)}
         docContent={docTextContent}
-      />
-
-      <VersionHistoryPanel
-        open={showVersionPanel}
-        onClose={() => setShowVersionPanel(false)}
-        versions={versions}
-        isLoading={isVersionsLoading}
-        onRollback={handleRollback}
       />
     </>
   );
