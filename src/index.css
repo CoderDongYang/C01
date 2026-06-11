@@ -108,3 +108,79 @@
 .prose-editor .tiptap ul[data-type="taskList"] li label {
   margin-top: 0.2rem;
 }
+
+.prose-editor .tiptap img.editor-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  display: block;
+}
+
+.prose-editor .tiptap pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.prose-editor .tiptap pre code.hljs * {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+}
+
+.prose-editor .tiptap .hljs-comment,
+.prose-editor .tiptap .hljs-quote {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.prose-editor .tiptap .hljs-keyword,
+.prose-editor .tiptap .hljs-selector-tag,
+.prose-editor .tiptap .hljs-type {
+  color: #c026d3;
+}
+
+.prose-editor .tiptap .hljs-string,
+.prose-editor .tiptap .hljs-attr,
+.prose-editor .tiptap .hljs-template-tag,
+.prose-editor .tiptap .hljs-template-variable,
+.prose-editor .tiptap .hljs-variable {
+  color: #059669;
+}
+
+.prose-editor .tiptap .hljs-number,
+.prose-editor .tiptap .hljs-literal,
+.prose-editor .tiptap .hljs-symbol,
+.prose-editor .tiptap .hljs-bullet {
+  color: #d97706;
+}
+
+.prose-editor .tiptap .hljs-title,
+.prose-editor .tiptap .hljs-name,
+.prose-editor .tiptap .hljs-section,
+.prose-editor .tiptap .hljs-built_in,
+.prose-editor .tiptap .hljs-builtin-name {
+  color: #2563eb;
+}
+
+.prose-editor .tiptap .hljs-meta,
+.prose-editor .tiptap .hljs-selector-id,
+.prose-editor .tiptap .hljs-selector-class {
+  color: #7c3aed;
+}
+
+.prose-editor .tiptap .hljs-emphasis {
+  font-style: italic;
+}
+
+.prose-editor .tiptap .hljs-strong {
+  font-weight: 700;
+}
+
+.prose-editor .tiptap .hljs-addition {
+  color: #059669;
+}
+
+.prose-editor .tiptap .hljs-deletion {
+  color: #dc2626;
+}

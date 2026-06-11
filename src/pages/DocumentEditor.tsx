@@ -5,39 +5,102 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Image from '@tiptap/extension-image';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { common, createLowlight } from 'lowlight';
 import {
   ArrowLeft, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus, X, Send, Bot, Sparkles,
+  Image as ImageIcon, Undo2, Redo2,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useDocumentStore } from '@/stores/documentStore';
+
+const lowlight = createLowlight(common);
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null }) {
+function EditorToolbar({
+  editor,
+  onUploadImage,
+}: {
+  editor: ReturnType<typeof useEditor> | null;
+  onUploadImage: (file: File) => void;
+}) {
   if (!editor) return null;
 
-  const buttons = [
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onUploadImage(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const historyButtons = [
+    { icon: Undo2, action: () => editor.chain().focus().undo().run(), disabled: !editor.can().undo(), label: '撤销' },
+    { icon: Redo2, action: () => editor.chain().focus().redo().run(), disabled: !editor.can().redo(), label: '重做' },
+  ];
+
+  const formatButtons = [
     { icon: Bold, action: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold'), label: '粗体' },
     { icon: Italic, action: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic'), label: '斜体' },
     { icon: Strikethrough, action: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive('strike'), label: '删除线' },
+  ];
+
+  const headingButtons = [
     { icon: Heading1, action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(), active: editor.isActive('heading', { level: 1 }), label: '标题1' },
     { icon: Heading2, action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive('heading', { level: 2 }), label: '标题2' },
     { icon: Heading3, action: () => editor.chain().focus().toggleHeading({ level: 3 }).run(), active: editor.isActive('heading', { level: 3 }), label: '标题3' },
+  ];
+
+  const listButtons = [
     { icon: List, action: () => editor.chain().focus().toggleBulletList().run(), active: editor.isActive('bulletList'), label: '无序列表' },
     { icon: ListOrdered, action: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList'), label: '有序列表' },
     { icon: CheckSquare, action: () => editor.chain().focus().toggleTaskList().run(), active: editor.isActive('taskList'), label: '任务列表' },
+  ];
+
+  const insertButtons = [
     { icon: Code, action: () => editor.chain().focus().toggleCodeBlock().run(), active: editor.isActive('codeBlock'), label: '代码块' },
     { icon: Quote, action: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote'), label: '引用' },
     { icon: Minus, action: () => editor.chain().focus().setHorizontalRule().run(), active: false, label: '分割线' },
+    { icon: ImageIcon, action: handleImageClick, active: false, label: '插入图片' },
   ];
+
+  const ToolbarDivider = () => <div className="mx-1 h-5 w-px bg-border" />;
 
   return (
     <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card px-2 py-1.5">
-      {buttons.map(({ icon: Icon, action, active, label }) => (
+      {historyButtons.map(({ icon: Icon, action, disabled, label }) => (
+        <button
+          key={label}
+          onClick={action}
+          disabled={disabled}
+          title={label}
+          className={`rounded p-1.5 transition-colors ${
+            disabled
+              ? 'text-muted-foreground/30 cursor-not-allowed'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+
+      <ToolbarDivider />
+
+      {formatButtons.map(({ icon: Icon, action, active, label }) => (
         <button
           key={label}
           onClick={action}
@@ -51,6 +114,65 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> | null
           <Icon className="h-4 w-4" />
         </button>
       ))}
+
+      <ToolbarDivider />
+
+      {headingButtons.map(({ icon: Icon, action, active, label }) => (
+        <button
+          key={label}
+          onClick={action}
+          title={label}
+          className={`rounded p-1.5 transition-colors ${
+            active
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+
+      <ToolbarDivider />
+
+      {listButtons.map(({ icon: Icon, action, active, label }) => (
+        <button
+          key={label}
+          onClick={action}
+          title={label}
+          className={`rounded p-1.5 transition-colors ${
+            active
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+
+      <ToolbarDivider />
+
+      {insertButtons.map(({ icon: Icon, action, active, label }) => (
+        <button
+          key={label}
+          onClick={action}
+          title={label}
+          className={`rounded p-1.5 transition-colors ${
+            active
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 }
@@ -260,10 +382,19 @@ export default function DocumentEditor() {
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        codeBlock: false,
       }),
       Placeholder.configure({ placeholder: '开始书写...' }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Image.configure({
+        HTMLAttributes: {
+          class: 'editor-image',
+        },
+      }),
+      CodeBlockLowlight.configure({
+        lowlight,
+      }),
     ],
     content: '',
     onUpdate: ({ editor: e }) => {
@@ -275,6 +406,34 @@ export default function DocumentEditor() {
       }, 1000);
     },
   });
+
+  const handleUploadImage = useCallback(
+    async (file: File) => {
+      try {
+        const token = useAuthStore.getState().accessToken;
+        const formData = new FormData();
+        formData.append('image', file);
+
+        const response = await fetch('/api/upload/image', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        const result = await response.json();
+        if (result.success && result.data?.url) {
+          editor?.chain().focus().setImage({ src: result.data.url }).run();
+        } else {
+          console.error('上传失败:', result.error);
+        }
+      } catch (error) {
+        console.error('图片上传错误:', error);
+      }
+    },
+    [editor],
+  );
 
   useEffect(() => {
     if (!docId) return;
@@ -382,7 +541,7 @@ export default function DocumentEditor() {
         />
 
         <div className="mb-3">
-          <EditorToolbar editor={editor} />
+          <EditorToolbar editor={editor} onUploadImage={handleUploadImage} />
         </div>
 
         <div className="mx-auto max-w-4xl">
