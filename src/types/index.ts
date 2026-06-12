@@ -9,6 +9,10 @@ export type {
   OnlineUser,
   CursorPosition,
   TypingUser,
+  SpaceOnlineUser,
+  NotificationType,
+  ToastNotification,
+  DocumentUpdatePayload,
 } from '../../shared/types';
 
 export interface SpaceResponse {

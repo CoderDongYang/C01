@@ -73,6 +73,32 @@ export interface OnlineUser {
   color: string;
 }
 
+export interface SpaceOnlineUser extends OnlineUser {
+  currentDocId: string | null;
+  currentDocTitle: string | null;
+  lastActive: number;
+}
+
+export type NotificationType = 'info' | 'success' | 'warning' | 'error';
+
+export interface ToastNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message?: string;
+  duration?: number;
+}
+
+export interface DocumentUpdatePayload {
+  docId: string;
+  docTitle: string;
+  updatedBy: string;
+  updatedByName: string;
+  updatedByAvatar: string | null;
+  updatedAt: string;
+  updateType: 'content' | 'title' | 'both';
+}
+
 export interface CursorPosition {
   userId: string;
   anchor: number;
@@ -96,4 +122,13 @@ export interface SocketEvents {
   'user-joined': (user: OnlineUser) => void;
   'user-left': (userId: string) => void;
   'version-saved': (version: DocumentVersion) => void;
+
+  'join-space': (spaceId: string) => void;
+  'leave-space': (spaceId: string) => void;
+  'space-online-users': (users: SpaceOnlineUser[]) => void;
+  'space-user-joined': (user: SpaceOnlineUser) => void;
+  'space-user-left': (user: SpaceOnlineUser) => void;
+  'space-user-doc-changed': (data: { userId: string; docId: string | null; docTitle: string | null }) => void;
+
+  'document-updated': (data: DocumentUpdatePayload) => void;
 }

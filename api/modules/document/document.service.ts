@@ -2,6 +2,7 @@ import { query, queryReturning, generateId } from '../../config/index.js'
 import { AppError } from '../../middleware/error.js'
 import { saveVersion } from './version.service.js'
 import { getDocumentOnlineCount } from '../../socket/documentUsers.js'
+import { broadcastDocumentUpdate } from '../../socket/index.js'
 
 export const createDocument = async (
   spaceId: string,
@@ -79,9 +80,10 @@ export const updateDocument = async (
     throw new AppError('您没有权限修改该文档', 403)
   }
 
+  const contentChanged = data.content !== undefined && data.content !== document.content
+  const titleChanged = data.title !== undefined && data.title !== document.title
+
   if (!skipVersionSave) {
-    const contentChanged = data.content !== undefined && data.content !== document.content
-    const titleChanged = data.title !== undefined && data.title !== document.title
     if (contentChanged || titleChanged) {
       await saveVersion(
         docId,
@@ -106,6 +108,30 @@ export const updateDocument = async (
   values.push(docId)
   query(`UPDATE documents SET ${updates.join(', ')} WHERE id = ?`, values)
   const result = query('SELECT * FROM documents WHERE id = ?', [docId])
+
+  if (contentChanged || titleChanged) {
+    const userResult = query(
+      'SELECT id, username, avatar FROM users WHERE id = ?',
+      [userId],
+    )
+    const updater = userResult.rows[0] as { id: string; username: string; avatar: string | null } | undefined
+    const updatedDoc = result.rows[0] as { title: string; updated_at: string }
+    if (updater && updatedDoc) {
+      let updateType: 'content' | 'title' | 'both' = 'both'
+      if (contentChanged && !titleChanged) updateType = 'content'
+      else if (!contentChanged && titleChanged) updateType = 'title'
+      broadcastDocumentUpdate({
+        docId,
+        docTitle: (data.title as string) || updatedDoc.title,
+        updatedBy: userId,
+        updatedByName: updater.username,
+        updatedByAvatar: updater.avatar,
+        updatedAt: updatedDoc.updated_at,
+        updateType,
+      })
+    }
+  }
+
   return result.rows[0]
 }
 

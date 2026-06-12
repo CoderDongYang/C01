@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, FileText, ArrowLeft, Trash2, Copy,
-  Shield, Crown, UserCircle, X, Users, Radio,
+  Shield, Crown, UserCircle, X, Users, Radio, Edit3, LogIn, LogOut,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useSpaceStore } from '@/stores/spaceStore';
 import { useDocumentStore } from '@/stores/documentStore';
-import type { SpaceMemberResponse } from '@/types';
+import { useNotificationStore } from '@/stores/notificationStore';
+import { getSocket } from '@/lib/socket';
+import { cn } from '@/lib/utils';
+import type { SpaceMemberResponse, SpaceOnlineUser } from '@/types';
 
 function CreateDocDialog({
   open,
@@ -165,9 +168,12 @@ export default function SpaceDetail() {
   const user = useAuthStore((s) => s.user);
   const { currentSpace, members, fetchSpace, fetchMembers, updateMemberRole, removeMember } = useSpaceStore();
   const { documents, fetchDocuments, createDocument, deleteDocument } = useDocumentStore();
+  const addNotification = useNotificationStore((s) => s.addNotification);
 
   const [showCreateDoc, setShowCreateDoc] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [spaceOnlineUsers, setSpaceOnlineUsers] = useState<Map<string, SpaceOnlineUser>>(new Map());
+  const socketRef = useRef(getSocket());
 
   useEffect(() => {
     if (spaceId) {
@@ -176,6 +182,94 @@ export default function SpaceDetail() {
       fetchMembers(spaceId);
     }
   }, [spaceId, fetchSpace, fetchDocuments, fetchMembers]);
+
+  useEffect(() => {
+    if (!spaceId || !user?.id) return;
+    const socket = socketRef.current;
+    const currentUserId = user.id;
+
+    const handleSpaceOnlineUsers = (users: SpaceOnlineUser[]) => {
+      const userMap = new Map<string, SpaceOnlineUser>();
+      users.forEach((u) => {
+        if (u.id !== currentUserId) {
+          userMap.set(u.id, u);
+        }
+      });
+      setSpaceOnlineUsers(userMap);
+    };
+
+    const handleSpaceUserJoined = (joinedUser: SpaceOnlineUser) => {
+      if (joinedUser.id === currentUserId) return;
+      setSpaceOnlineUsers((prev) => {
+        const next = new Map(prev);
+        next.set(joinedUser.id, joinedUser);
+        return next;
+      });
+      addNotification({
+        type: 'info',
+        title: `${joinedUser.username} 加入了空间`,
+        message: '开始协同工作吧',
+        duration: 4000,
+      });
+    };
+
+    const handleSpaceUserLeft = (leftUser: SpaceOnlineUser) => {
+      if (leftUser.id === currentUserId) return;
+      setSpaceOnlineUsers((prev) => {
+        const next = new Map(prev);
+        next.delete(leftUser.id);
+        return next;
+      });
+      addNotification({
+        type: 'info',
+        title: `${leftUser.username} 离开了空间`,
+        message: leftUser.currentDocTitle ? `正在编辑: ${leftUser.currentDocTitle}` : undefined,
+        duration: 4000,
+      });
+    };
+
+    const handleSpaceUserDocChanged = (data: { userId: string; docId: string | null; docTitle: string | null }) => {
+      if (data.userId === currentUserId) return;
+      setSpaceOnlineUsers((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(data.userId);
+        if (existing) {
+          next.set(data.userId, {
+            ...existing,
+            currentDocId: data.docId,
+            currentDocTitle: data.docTitle,
+            lastActive: Date.now(),
+          });
+        }
+        return next;
+      });
+    };
+
+    socket.on('space-online-users', handleSpaceOnlineUsers);
+    socket.on('space-user-joined', handleSpaceUserJoined);
+    socket.on('space-user-left', handleSpaceUserLeft);
+    socket.on('space-user-doc-changed', handleSpaceUserDocChanged);
+
+    socket.emit('join-space', spaceId);
+
+    return () => {
+      socket.off('space-online-users', handleSpaceOnlineUsers);
+      socket.off('space-user-joined', handleSpaceUserJoined);
+      socket.off('space-user-left', handleSpaceUserLeft);
+      socket.off('space-user-doc-changed', handleSpaceUserDocChanged);
+      socket.emit('leave-space', spaceId);
+    };
+  }, [spaceId, user?.id, addNotification]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSpaceOnlineUsers((prev) => {
+        const next = new Map(prev);
+        return next;
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const canManage = currentSpace?.role === 'owner' || currentSpace?.role === 'admin';
   const canChangeRole = currentSpace?.role === 'owner';
@@ -309,6 +403,9 @@ export default function SpaceDetail() {
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-brand" />
                   <h3 className="font-semibold text-foreground">成员</h3>
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    在线 {spaceOnlineUsers.size}/{members.length}
+                  </span>
                 </div>
                 {canManage && (
                   <button
@@ -320,38 +417,94 @@ export default function SpaceDetail() {
                 )}
               </div>
               <div className="divide-y divide-border">
-                {members.map((member) => (
-                  <div key={member.user_id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-medium text-brand-foreground">
-                      {getInitials(member.username)}
+                {members.map((member) => {
+                  const onlineUser = spaceOnlineUsers.get(member.user_id);
+                  const isOnline = !!onlineUser || member.user_id === user?.id;
+                  const editingDoc = onlineUser?.currentDocTitle;
+                  const editingDocId = onlineUser?.currentDocId;
+                  return (
+                    <div key={member.user_id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="relative">
+                        <div
+                          className={cn(
+                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium',
+                            member.user_id === user?.id
+                              ? 'ring-2 ring-brand ring-offset-2 ring-offset-card'
+                              : '',
+                          )}
+                          style={{
+                            backgroundColor: onlineUser?.color || 'hsl(var(--brand))',
+                            color: 'white',
+                          }}
+                        >
+                          {member.avatar ? (
+                            <img
+                              src={member.avatar}
+                              alt={member.username}
+                              className="h-full w-full rounded-full object-cover"
+                            />
+                          ) : (
+                            getInitials(member.username)
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            'absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card',
+                            isOnline ? 'bg-green-500' : 'bg-gray-400',
+                          )}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {member.username}
+                            {member.user_id === user?.id && (
+                              <span className="ml-1 text-xs text-muted-foreground">(你)</span>
+                            )}
+                          </p>
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                        {editingDoc && (
+                          <div className="mt-1 flex items-center gap-1 text-xs text-accent">
+                            <Edit3 className="h-3 w-3" />
+                            <button
+                              onClick={() => {
+                                if (editingDocId) {
+                                  navigate(`/doc/${editingDocId}`, { state: { spaceId } });
+                                }
+                              }}
+                              className="truncate hover:underline cursor-pointer text-left max-w-[140px]"
+                              title={editingDoc}
+                            >
+                              正在编辑: {editingDoc}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <RoleBadge role={member.role} />
+                        {canChangeRole && member.role !== 'owner' && (
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={member.role}
+                              onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
+                              className="rounded border border-border bg-background px-1 py-0.5 text-xs text-foreground"
+                            >
+                              <option value="admin">管理员</option>
+                              <option value="member">成员</option>
+                            </select>
+                            <button
+                              onClick={() => handleRemoveMember(member.user_id)}
+                              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">{member.username}</p>
-                      <p className="truncate text-xs text-muted-foreground">{member.email}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <RoleBadge role={member.role} />
-                      {canChangeRole && member.role !== 'owner' && (
-                        <>
-                          <select
-                            value={member.role}
-                            onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
-                            className="rounded border border-border bg-background px-1 py-0.5 text-xs text-foreground"
-                          >
-                            <option value="admin">管理员</option>
-                            <option value="member">成员</option>
-                          </select>
-                          <button
-                            onClick={() => handleRemoveMember(member.user_id)}
-                            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

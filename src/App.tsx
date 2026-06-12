@@ -7,10 +7,12 @@ import Dashboard from "@/pages/Dashboard";
 import SpaceDetail from "@/pages/SpaceDetail";
 import DocumentEditor from "@/pages/DocumentEditor";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ToastContainer from "@/components/Toast";
 
 export default function App() {
   return (
     <Router>
+      <ToastContainer />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

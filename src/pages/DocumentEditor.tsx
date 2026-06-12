@@ -11,10 +11,15 @@ import { common, createLowlight } from 'lowlight';
 import {
   ArrowLeft, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3,
   List, ListOrdered, CheckSquare, Code, Quote, Minus, X, Send, Bot, Sparkles,
-  Image as ImageIcon, Undo2, Redo2,
+  Image as ImageIcon, Undo2, Redo2, RefreshCw, AlertCircle, User,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useDocumentStore } from '@/stores/documentStore';
+import { getSocket } from '@/lib/socket';
+import OnlineUsersBadge from '@/components/OnlineUsersBadge';
+import { useCollaborativeEditor } from '@/hooks/useCollaborativeEditor';
+import type { DocumentUpdatePayload } from '@/types';
+import { cn } from '@/lib/utils';
 
 const lowlight = createLowlight(common);
 
@@ -374,9 +379,18 @@ export default function DocumentEditor() {
   const spaceId = (location.state as { spaceId?: string })?.spaceId;
 
   const { currentDocument, fetchDocument, updateDocument, setCurrentSpaceId } = useDocumentStore();
+  const user = useAuthStore((s) => s.user);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [title, setTitle] = useState('');
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const socketRef = useRef(getSocket());
+  const [pendingUpdate, setPendingUpdate] = useState<DocumentUpdatePayload | null>(null);
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
+  const lastSentContentRef = useRef<string>('');
+
+  const handleTitleChange = useCallback((newTitle: string) => {
+    setTitle(newTitle);
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -398,6 +412,13 @@ export default function DocumentEditor() {
     ],
     content: '',
     onUpdate: ({ editor: e }) => {
+      const contentStr = JSON.stringify(e.getJSON());
+      if (contentStr !== lastSentContentRef.current) {
+        lastSentContentRef.current = contentStr;
+        if (collabRef.current) {
+          collabRef.current.sendContentUpdate(e.getJSON());
+        }
+      }
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         if (docId) {
@@ -406,6 +427,47 @@ export default function DocumentEditor() {
       }, 1000);
     },
   });
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  const collabRef = useRef<ReturnType<typeof useCollaborativeEditor> | null>(null);
+
+  const collabResult = useCollaborativeEditor({
+    docId: docId!,
+    editor: editor,
+    onTitleChange: handleTitleChange,
+  });
+
+  useEffect(() => {
+    collabRef.current = collabResult;
+  }, [collabResult]);
+
+  const { onlineUsers, sendTitleUpdate } = collabResult;
+
+  useEffect(() => {
+    if (!docId || !user?.id) return;
+    const socket = socketRef.current;
+    const currentUserId = user.id;
+
+    const handleDocumentUpdated = (data: DocumentUpdatePayload) => {
+      if (data.updatedBy === currentUserId) return;
+      setPendingUpdate(data);
+    };
+
+    socket.on('document-updated', handleDocumentUpdated);
+
+    return () => {
+      socket.off('document-updated', handleDocumentUpdated);
+    };
+  }, [docId, user?.id]);
+
+  const handleRefreshDocument = useCallback(async () => {
+    if (!docId) return;
+    await fetchDocument(docId);
+    setPendingUpdate(null);
+  }, [docId, fetchDocument]);
 
   const handleUploadImage = useCallback(
     async (file: File) => {
@@ -487,9 +549,10 @@ export default function DocumentEditor() {
 
   const handleTitleBlur = useCallback(() => {
     if (docId && title.trim() && currentDocument?.title !== title.trim()) {
+      sendTitleUpdate(title.trim());
       updateDocument(docId, { title: title.trim() });
     }
-  }, [docId, title, currentDocument, updateDocument]);
+  }, [docId, title, currentDocument, updateDocument, sendTitleUpdate]);
 
   const handleTitleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -505,19 +568,70 @@ export default function DocumentEditor() {
 
   return (
     <>
+      {pendingUpdate && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 animate-bounce">
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-xl max-w-md">
+            <div className="relative shrink-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              {pendingUpdate.updatedByAvatar ? (
+                <img
+                  src={pendingUpdate.updatedByAvatar}
+                  alt={pendingUpdate.updatedByName}
+                  className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-card object-cover"
+                />
+              ) : (
+                <div className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-card bg-brand text-[8px] font-medium text-white">
+                  <User className="h-3 w-3" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">
+                {pendingUpdate.updatedByName} 更新了文档
+                <span className="ml-1 text-xs text-muted-foreground">
+                  {pendingUpdate.updateType === 'title' && '(标题)'}
+                  {pendingUpdate.updateType === 'content' && '(内容)'}
+                  {pendingUpdate.updateType === 'both' && '(标题和内容)'}
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                《{pendingUpdate.docTitle}》有新的修改
+              </p>
+            </div>
+            <button
+              onClick={handleRefreshDocument}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                'bg-accent text-accent-foreground hover:bg-accent/90',
+              )}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              点击刷新
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
         <div className="mb-4 flex items-center justify-between">
-          <button
-            onClick={() => {
-              if (currentDocument) navigate(`/space/${currentDocument.space_id}`);
-              else if (spaceId) navigate(`/space/${spaceId}`);
-              else navigate('/dashboard');
-            }}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回空间
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                if (currentDocument) navigate(`/space/${currentDocument.space_id}`);
+                else if (spaceId) navigate(`/space/${spaceId}`);
+                else navigate('/dashboard');
+              }}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              返回空间
+            </button>
+            {onlineUsers.length > 0 && (
+              <OnlineUsersBadge users={onlineUsers} />
+            )}
+          </div>
           <button
             onClick={() => setShowAiPanel(!showAiPanel)}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
