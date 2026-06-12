@@ -18,6 +18,7 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { getSocket } from '@/lib/socket';
 import OnlineUsersBadge from '@/components/OnlineUsersBadge';
 import { useCollaborativeEditor } from '@/hooks/useCollaborativeEditor';
+import { useSpaceSocket } from '@/hooks/useSpaceSocket';
 import type { DocumentUpdatePayload } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -376,7 +377,7 @@ export default function DocumentEditor() {
   const { docId } = useParams<{ docId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const spaceId = (location.state as { spaceId?: string })?.spaceId;
+  const stateSpaceId = (location.state as { spaceId?: string })?.spaceId;
 
   const { currentDocument, fetchDocument, updateDocument, setCurrentSpaceId } = useDocumentStore();
   const user = useAuthStore((s) => s.user);
@@ -387,6 +388,11 @@ export default function DocumentEditor() {
   const [pendingUpdate, setPendingUpdate] = useState<DocumentUpdatePayload | null>(null);
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
   const lastSentContentRef = useRef<string>('');
+
+  const docSpaceId = currentDocument?.space_id;
+  const activeSpaceId = stateSpaceId || docSpaceId;
+
+  useSpaceSocket(activeSpaceId);
 
   const handleTitleChange = useCallback((newTitle: string) => {
     setTitle(newTitle);
@@ -499,9 +505,9 @@ export default function DocumentEditor() {
 
   useEffect(() => {
     if (!docId) return;
-    if (spaceId) setCurrentSpaceId(spaceId);
+    if (activeSpaceId) setCurrentSpaceId(activeSpaceId);
     fetchDocument(docId);
-  }, [docId, spaceId, fetchDocument, setCurrentSpaceId]);
+  }, [docId, activeSpaceId, fetchDocument, setCurrentSpaceId]);
 
   useEffect(() => {
     if (currentDocument) {
@@ -619,8 +625,8 @@ export default function DocumentEditor() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => {
-                if (currentDocument) navigate(`/space/${currentDocument.space_id}`);
-                else if (spaceId) navigate(`/space/${spaceId}`);
+                if (activeSpaceId) navigate(`/space/${activeSpaceId}`);
+                else if (currentDocument) navigate(`/space/${currentDocument.space_id}`);
                 else navigate('/dashboard');
               }}
               className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"

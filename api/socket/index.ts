@@ -56,9 +56,13 @@ export const setupSocketIO = (server: import('http').Server) => {
 
     socket.on('join-space', (spaceId: string) => {
       console.log(`[Socket] ${user.username} joining space: ${spaceId}`)
+      const existingUsers = getSpaceOnlineUsers(spaceId)
+      const userAlreadyInSpace = existingUsers.some((u) => u.id === user.id)
       socket.join(`space:${spaceId}`)
       const spaceUser = addUserToSpace(spaceId, user, socket.id)
-      socket.to(`space:${spaceId}`).emit('space-user-joined', spaceUser)
+      if (!userAlreadyInSpace) {
+        socket.to(`space:${spaceId}`).emit('space-user-joined', spaceUser)
+      }
       socket.emit('space-online-users', getSpaceOnlineUsers(spaceId))
     })
 

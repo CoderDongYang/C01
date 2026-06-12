@@ -2,13 +2,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, FileText, ArrowLeft, Trash2, Copy,
-  Shield, Crown, UserCircle, X, Users, Radio, Edit3, LogIn, LogOut,
+  Shield, Crown, UserCircle, X, Users, Radio, Edit3,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useSpaceStore } from '@/stores/spaceStore';
 import { useDocumentStore } from '@/stores/documentStore';
-import { useNotificationStore } from '@/stores/notificationStore';
-import { getSocket } from '@/lib/socket';
+import { useSpaceSocket } from '@/hooks/useSpaceSocket';
 import { cn } from '@/lib/utils';
 import type { SpaceMemberResponse, SpaceOnlineUser } from '@/types';
 
@@ -168,12 +167,11 @@ export default function SpaceDetail() {
   const user = useAuthStore((s) => s.user);
   const { currentSpace, members, fetchSpace, fetchMembers, updateMemberRole, removeMember } = useSpaceStore();
   const { documents, fetchDocuments, createDocument, deleteDocument } = useDocumentStore();
-  const addNotification = useNotificationStore((s) => s.addNotification);
 
   const [showCreateDoc, setShowCreateDoc] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [spaceOnlineUsers, setSpaceOnlineUsers] = useState<Map<string, SpaceOnlineUser>>(new Map());
-  const socketRef = useRef(getSocket());
+
+  const { onlineUsers: spaceOnlineUsers } = useSpaceSocket(spaceId);
 
   useEffect(() => {
     if (spaceId) {
@@ -182,94 +180,6 @@ export default function SpaceDetail() {
       fetchMembers(spaceId);
     }
   }, [spaceId, fetchSpace, fetchDocuments, fetchMembers]);
-
-  useEffect(() => {
-    if (!spaceId || !user?.id) return;
-    const socket = socketRef.current;
-    const currentUserId = user.id;
-
-    const handleSpaceOnlineUsers = (users: SpaceOnlineUser[]) => {
-      const userMap = new Map<string, SpaceOnlineUser>();
-      users.forEach((u) => {
-        if (u.id !== currentUserId) {
-          userMap.set(u.id, u);
-        }
-      });
-      setSpaceOnlineUsers(userMap);
-    };
-
-    const handleSpaceUserJoined = (joinedUser: SpaceOnlineUser) => {
-      if (joinedUser.id === currentUserId) return;
-      setSpaceOnlineUsers((prev) => {
-        const next = new Map(prev);
-        next.set(joinedUser.id, joinedUser);
-        return next;
-      });
-      addNotification({
-        type: 'info',
-        title: `${joinedUser.username} 加入了空间`,
-        message: '开始协同工作吧',
-        duration: 4000,
-      });
-    };
-
-    const handleSpaceUserLeft = (leftUser: SpaceOnlineUser) => {
-      if (leftUser.id === currentUserId) return;
-      setSpaceOnlineUsers((prev) => {
-        const next = new Map(prev);
-        next.delete(leftUser.id);
-        return next;
-      });
-      addNotification({
-        type: 'info',
-        title: `${leftUser.username} 离开了空间`,
-        message: leftUser.currentDocTitle ? `正在编辑: ${leftUser.currentDocTitle}` : undefined,
-        duration: 4000,
-      });
-    };
-
-    const handleSpaceUserDocChanged = (data: { userId: string; docId: string | null; docTitle: string | null }) => {
-      if (data.userId === currentUserId) return;
-      setSpaceOnlineUsers((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(data.userId);
-        if (existing) {
-          next.set(data.userId, {
-            ...existing,
-            currentDocId: data.docId,
-            currentDocTitle: data.docTitle,
-            lastActive: Date.now(),
-          });
-        }
-        return next;
-      });
-    };
-
-    socket.on('space-online-users', handleSpaceOnlineUsers);
-    socket.on('space-user-joined', handleSpaceUserJoined);
-    socket.on('space-user-left', handleSpaceUserLeft);
-    socket.on('space-user-doc-changed', handleSpaceUserDocChanged);
-
-    socket.emit('join-space', spaceId);
-
-    return () => {
-      socket.off('space-online-users', handleSpaceOnlineUsers);
-      socket.off('space-user-joined', handleSpaceUserJoined);
-      socket.off('space-user-left', handleSpaceUserLeft);
-      socket.off('space-user-doc-changed', handleSpaceUserDocChanged);
-      socket.emit('leave-space', spaceId);
-    };
-  }, [spaceId, user?.id, addNotification]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSpaceOnlineUsers((prev) => {
-        const next = new Map(prev);
-        return next;
-      });
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   const canManage = currentSpace?.role === 'owner' || currentSpace?.role === 'admin';
   const canChangeRole = currentSpace?.role === 'owner';
